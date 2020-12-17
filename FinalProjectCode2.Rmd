@@ -6,14 +6,7 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
-- up to you to extend to multiple years 
-- put values of biomass tiles from particular plots in context of entire site 
-- for example: for biomass data at particular pieces, are they reflective of the whole site? 
-- summary statistics? mean of biomass across entire site (histogram)
-- y axis of figure 4 - where do they fall in relation to the site mean 
-- anova with regard to species count or biomass? do it with the mean biomass and response variable is mean biomass within 20m of subplot 
 
-- incidentally, i hate the "ltd" tag - can we just take it off and write "full" whenever it's the whole dataset, because we're not really looking at full site data anyway
 ## Setup 
 
 ```{r setup, include=FALSE}
@@ -112,38 +105,37 @@ biomass_full_df <- as.data.frame(biomass_full, xy=TRUE)
 
 ```
 
-I use the `easting` and `northing` from plot_points_SJER, which is limited to only the plots with plant diversity data available. 
+I use the `easting` and `northing` from `plot_points_SJER`, which is limited to only the plots with plant diversity data available.
+I reprojected the `subplot_points_SJER` vector to match the biomass rasters (proj=UTM)
 ```{r biomass data just for the plots with diversity data available}
 # Fetch biomass data again, but only for those plots with diversity data available
-biomass_subplots <- byTileAOP(dpID="DP3.30016.001", site="SJER", year="2019", easting=easting, northing=northing, buffer=20, check.size = F)
+# specified with easting and northing
+byTileAOP(dpID="DP3.30016.001", site="SJER", year="2019", easting=easting, northing=northing, buffer=20, check.size = F)
 
 # Import rasters
 biomass_22 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_258000_4107000_Biomass.tif")
 biomass_23 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_258000_4106000_Biomass.tif")
+
+# Merge
 biomass_subplots <- merge(biomass_22, biomass_23)
+biomass_subplots_df_2 <- as.data.frame(biomass_subplots, xy=TRUE)
+crs(biomass_subplots)
 
 
-# Defining new CRS to use with biomass and location data
-crs_latlong <- "+proj=longlat +datum=WGS84 +no_defs"
-
-
-
-biomass_subplots_latlong <- projectRaster(biomass_subplots, crs=crs_latlong)
+# Reproject biomass subplot raster
+biomass_subplots_latlong <- projectRaster(biomass_subplots, crs=crs(subplot_points_SJER))
 crs(biomass_subplots_latlong)
 
-biomass_subplots_df <- as.data.frame(biomass_subplot_latlong, xy=TRUE)
+biomass_subplots_df <- as.data.frame(biomass_subplots_latlong, xy= TRUE)
 
-# Check new crs to be sure
+# Check original crs to be sure
 crs(subplot_points_SJER)
+
+subplot_points_SJER_utm <- st_transform(subplot_points_SJER, crs(biomass_subplots))
 
 
 ```
 
-
-
-I still need to add a column that will read only with month sampled (right now it's as 2019-03-10 or something) in `endDate`
-I then need to update my graph so that it is colored by endDate as well as separated by plot. 
-How does plant diversity change over 3 months? 
 
 I load in plant presence and percent cover data using NEON utilities, over the three month survey period. I count the number of unique species found in the study plot as distinct `taxonID`. I then add the `uniqueID` column name and a separate column for the date of the data collection. 
 ```{r PPPC data}
@@ -196,14 +188,13 @@ all_data
 # THIS IS A NOTE FOR MYSELF -- I CAN'T BELIEVE THIS WORKED ON THE FIRST TRY!!!
 ```
 
-# Analysis
+## Analysis
 ```{r mean biomass full site}
 biomass_mean_full <- biomass_full_df %>%
   summarize(biomass_mean = mean(layer, na.rm = TRUE),
             biomass_sd = sd(layer, na.rm = TRUE))
 print(biomass_mean_full)
-mean(biomass_full_df$layer)
-sd(biomass_full_df$layer)
+
 ```
 
 ```{r anova}
@@ -223,6 +214,11 @@ biomass_map2 <- ggplot(biomass_subplots_df) +
   xlab(" ") +
   ylab(" ") +
   theme(legend.title = element_text("Biomass"))
+
+ggplot(biomass_subplots_df_2) +
+  geom_raster(aes(x = x, y = y,  fill = layer)) +
+  geom_sf(data = subplot_points_SJER_utm)
+
 
 
 biomass_map2
