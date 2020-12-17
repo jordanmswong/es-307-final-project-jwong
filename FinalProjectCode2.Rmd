@@ -33,57 +33,46 @@ library(sf)       # for vector data
 
 ## Data: Plot locations
 
-  Biomass data is available for the entire field site. However, plant diversity data is only available for three of the study plots. My analysis of plant diversity is therefore limited to only three field sites. 
+  Biomass data is available for the entire field site. However, plant diversity data is only available for three of the study plots. My analysis of plant diversity is therefore limited to only three field plots. Within these three field plots are 1m^2 `subplots` from which plant diversity data was collected. I use `full` in variable names to refer to the entire SJER site; otherwise, variables refer only to the three sample plots. 
 
-NEED TO FIX THIS: need a few lines where i specify that the easting/northing are just for the 3 plots with diversity data... need the original easting/northing for the biomass_data query
-
-NEON provides shapefiles for the centroids, points, and polygons for all of its field sites. These indicate plots and subplots, as well as extent of a collection of plots or entire sites. Here, I import the vector file containing all of the NEON plot locations, then limit the data to only plots of interest, i.e. those that are within the SJER and that I know have plant diversity data. Not all sites have diversity data, and I will only be using diversity data found at the 1m plot level. So I need to find only the 3 locations at SJER that have diversity data, and within those, find only the 1m plots. The locations are also in a different CRS than the biomass data. 
-
-```{r limiting plot locations}
+  NEON provides shapefiles for the centroids, points, and polygons for all of its field sites. These indicate plots and subplots, as well as extent of a collection of plots or entire sites. Here, I import the vector file containing all of the NEON plot locations, then limit the data to only plots of interest, i.e. those that are within the SJER and that I know have plant diversity data. Not all sites have diversity data, and I will only be using diversity data found at the 1m plot level. So I need to find only the 3 locations at SJER that have diversity data, and within those, find only the 1m plots. The locations are also in a different CRS than the biomass data, so I reprojected the biomass raster to match the location data. 
+```{r plot location wrangling}
 # Limiting the location data to just those we have diversity data for as well
 
 #import plot points
-plot_points <- st_read("data/All_NEON_TOS_Plots_V8/All_NEON_TOS_Plot_Points_V8.shp")
+plot_points <- st_read("data/All_NEON_TOS_Plots_V8/All_NEON_TOS_Plot_Points_V8.shp") # all of the plot points at all of the NEON sites
+
+# Limit to only SJER sites with available diversity data
+plot_points_SJER <- filter(plot_points, siteID=="SJER", plotID %in% c("SJER_016", "SJER_012", "SJER_022")) # These are the plots we have diversity data for
 
 # Select full SJER site
 plot_points_SJER_full <- filter(plot_points, siteID=="SJER")
-
-# Limit to only SJER sites with available diversity data
-plot_points_SJER_ltd <- filter(plot_points, siteID=="SJER", plotID %in% c("SJER_016", "SJER_012", "SJER_022")) # These are the plots we have diversity data for
 
 ### extract easting and northing: for fetching biomass data 
 # full site
 
 easting_full <- plot_points_SJER_full$easting
-nothing_full <- plot_points_SJER_full$northing
+northing_full <- plot_points_SJER_full$northing
 
 # limited site
-easting_ltd  <- plot_points_SJER_ltd$easting
-northing_ltd <- plot_points_SJER_ltd$northing
+easting  <- plot_points_SJER$easting
+northing <- plot_points_SJER$northing
 
 
 
 # find just 1m subplots and give them a unique ID 
 # and select only the plots that have diversity data
-subplot_points_SJER_ltd <- plot_points_SJER_ltd %>%
+subplot_points_SJER <- plot_points_SJER %>%
   mutate(plottype = nchar(plot_points_SJER$pointID)) %>% 
   filter(plottype == 6) %>% # plot names with 6 characters correspond to 1m plots
   mutate(uniqueID = paste(plotID, pointID)) # unique ID corresponds to both point and plot 
 
 ```
-
-## I don't think this is still my figure 1??
-```{r figure 1}
-subplot_points_map <- ggplot(data = subplot_points_SJER_ltd) +
-  geom_sf(aes(color = plotID)) 
-
-subplot_points_map
-```
-***Figure 1.*** Plot locations and sizes at the San Joaquin Experimental Range. 
+Here, I use the `easting_full` and `northing_full` coordinates for the full site to extract biomass within 20m of every plot at the SJER site. 
 ```{r full site biomass data}
 # Biomass from San Joaquin Experimental Range, 2019
 # easting and northing must be matched vectors of UTM coordinates
-biomass_data <- byTileAOP(dpID="DP3.30016.001", site="SJER", year="2019", easting=easting_full, northing=northing_full, buffer=20)
+biomass_data_full <- byTileAOP(dpID="DP3.30016.001", site="SJER", year="2019", easting=easting_full, northing=northing_full, buffer=20, check.size = F)
 
 # Need to combine all of this together
 biomass_01 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_258000_4110000_Biomass.tif")
@@ -110,20 +99,25 @@ biomass_19 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectromete
 biomass_20 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_254000_4112000_Biomass.tif")
 biomass_21 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_254000_4110000_Biomass.tif")
 
-biomass_total <- merge(biomass_01, biomass_02, biomass_03,
+biomass_full  <- merge(biomass_01, biomass_02, biomass_03,
                        biomass_04, biomass_05, biomass_06,
                        biomass_07, biomass_08, biomass_09,
                        biomass_10, biomass_11, biomass_12,
                        biomass_13, biomass_14, biomass_15,
                        biomass_16, biomass_17, biomass_18,
                        biomass_19, biomass_20, biomass_21)
-crs(biomass_total)
-biomass_total_df <- as.data.frame(biomass_total, xy=TRUE)
+crs(biomass_full)
+biomass_full_df <- as.data.frame(biomass_full, xy=TRUE)
 
 
 ```
 
+I use the `easting` and `northing` from plot_points_SJER, which is limited to only the plots with plant diversity data available. 
 ```{r biomass data just for the plots with diversity data available}
+# Fetch biomass data again, but only for those plots with diversity data available
+biomass_subplots <- byTileAOP(dpID="DP3.30016.001", site="SJER", year="2019", easting=easting, northing=northing, buffer=20, check.size = F)
+
+# Import rasters
 biomass_22 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_258000_4107000_Biomass.tif")
 biomass_23 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_258000_4106000_Biomass.tif")
 biomass_subplots <- merge(biomass_22, biomass_23)
@@ -140,35 +134,9 @@ crs(biomass_subplots_latlong)
 biomass_subplots_df <- as.data.frame(biomass_subplot_latlong, xy=TRUE)
 
 # Check new crs to be sure
-crs(subplot_points_SJER_ltd)
+crs(subplot_points_SJER)
 
 
-```
-
-
-```{r figure 1 biomass and subplots}
-
-biomass_map2 <- ggplot(biomass_subplots_df) +
-  geom_raster(aes(x = x, y = y, fill = layer)) +
-  geom_sf(data = subplot_points_SJER) +
-  coord_sf(xlim = c(-119.718, -119.714), ylim = c(37.075, 37.085)) +
-  xlab(" ") +
-  ylab(" ") +
-  theme(legend.title = element_text("Biomass"))
-
-
-biomass_map2
-```
-
-
-
-
-```{r figure 2 histogram}
-biomass_histogram <- ggplot(biomass_total_df) +
-  geom_histogram(aes(layer)) +
-  xlab(expression(Biomass~g/m^2)) +
-  ylab(expression(Count~1m^2 pixels))
-biomass_histogram
 ```
 
 
@@ -176,19 +144,21 @@ biomass_histogram
 I still need to add a column that will read only with month sampled (right now it's as 2019-03-10 or something) in `endDate`
 I then need to update my graph so that it is colored by endDate as well as separated by plot. 
 How does plant diversity change over 3 months? 
+
+I load in plant presence and percent cover data using NEON utilities, over the three month survey period. I count the number of unique species found in the study plot as distinct `taxonID`. I then add the `uniqueID` column name and a separate column for the date of the data collection. 
 ```{r PPPC data}
 # Getting all of the information in at once using NEONutilities
 
-PPPC <- loadByProduct(dpID = "DP1.10058.001", site = "SJER", startdate = "2019-03", enddate = "2019-05")
+PPPC <- loadByProduct(dpID = "DP1.10058.001", site = "SJER", startdate = "2019-03", enddate = "2019-03", check.size = F)
 
 # unlist to local environment so we can see all of the data
 list2env(PPPC, .GlobalEnv)
 
 # Add unique ID column to 1m2 data frame
 div_1m2Data <- div_1m2Data %>%
-  mutate(uniqueID = paste(plotID, subplotID)) # will use this for merge later
- 
-species_count_1m <- div_1m2Data %>%
+  mutate(uniqueID = paste(plotID, subplotID))  # will use this for merge later
+
+species_count_1m <- div_1m2Data %>% 
   group_by(uniqueID) %>% # group based on unique ID
   summarize(n = n_distinct(`taxonID`)) %>%
   mutate(plotID = str_split_fixed(uniqueID, " ", n=2)[,1],
@@ -196,19 +166,13 @@ species_count_1m <- div_1m2Data %>%
 species_count_1m
 
 
-ggplot(species_count_1m) +
-  geom_bar(stat = "identity", aes(x = uniqueID, y = n, color = plotID, fill = plotID)) +
-  xlab("Unique Subplot ID") +
-  ylab("Species Richness") +
-  theme(axis.text.x = element_text(angle = 45))
-  
 ```
 
 
 ```{r extract biomass data}
 # Find mean biomass 
 mean_biomass <- extract(x = biomass_subplots_latlong,
-                                  y = subplot_points_SJER_ltd,
+                                  y = subplot_points_SJER,
                                   buffer = 20,
                                   fun = mean, 
                                   df = TRUE)
@@ -231,6 +195,61 @@ all_data
 
 # THIS IS A NOTE FOR MYSELF -- I CAN'T BELIEVE THIS WORKED ON THE FIRST TRY!!!
 ```
+
+# Analysis
+```{r mean biomass full site}
+biomass_mean_full <- biomass_full_df %>%
+  summarize(biomass_mean = mean(layer, na.rm = TRUE),
+            biomass_sd = sd(layer, na.rm = TRUE))
+print(biomass_mean_full)
+mean(biomass_full_df$layer)
+sd(biomass_full_df$layer)
+```
+
+```{r anova}
+aov_biomass <- aov(biomass_mean ~ plotID, data = all_data)
+summary(aov_biomass)
+
+TukeyHSD(aov_biomass)
+```
+
+## Figures
+```{r figure 1 biomass and subplots}
+
+biomass_map2 <- ggplot(biomass_subplots_df) +
+  geom_raster(aes(x = x, y = y, fill = layer)) +
+  geom_sf(data = subplot_points_SJER) +
+  coord_sf(xlim = c(-119.718, -119.714), ylim = c(37.075, 37.085)) +
+  xlab(" ") +
+  ylab(" ") +
+  theme(legend.title = element_text("Biomass"))
+
+
+biomass_map2
+```
+
+
+
+
+```{r figure 2 histogram}
+biomass_histogram <- ggplot(biomass_total_df) +
+  geom_histogram(aes(layer)) +
+  xlab(expression(Biomass~g/m^2)) +
+  ylab(expression(Count~1m^2~pixels))
+biomass_histogram
+```
+
+```{r figure 3 barplot}
+
+subplot_species_count <- ggplot(species_count_1m) +
+  geom_bar(stat = "identity", aes(x = uniqueID, y = n, color = month, fill = month)) +
+  xlab("Unique Subplot ID") +
+  ylab("Species Richness") +
+  theme(axis.text.x = element_text(angle = 45))
+
+subplot_species_count
+```
+
 
 
 
