@@ -116,23 +116,23 @@ byTileAOP(dpID="DP3.30016.001", site="SJER", year="2019", easting=easting, north
 biomass_22 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_258000_4107000_Biomass.tif")
 biomass_23 <- raster("DP3.30016.001/2019/FullSite/D17/2019_SJER_4/L3/Spectrometer/Biomass/NEON_D17_SJER_DP3_258000_4106000_Biomass.tif")
 
-# Merge
+# Merge both rasters together
 biomass_subplots <- merge(biomass_22, biomass_23)
-biomass_subplots_df_2 <- as.data.frame(biomass_subplots, xy=TRUE)
-crs(biomass_subplots)
 
+# Make data frame for plotting
+biomass_subplots_df_2 <- as.data.frame(biomass_subplots, xy=TRUE) # because df1 didn't work
 
-# Reproject biomass subplot raster
-biomass_subplots_latlong <- projectRaster(biomass_subplots, crs=crs(subplot_points_SJER))
-crs(biomass_subplots_latlong)
+# get CRS to reproject the location vector
+crs(biomass_subplots) # proj is UTM instead of longlat
 
-biomass_subplots_df <- as.data.frame(biomass_subplots_latlong, xy= TRUE)
+# Check subplot_points CRS
+crs(subplot_points_SJER) # projection is longlat 
 
-# Check original crs to be sure
-crs(subplot_points_SJER)
-
+## Reproject subplot points vector to match `biomass_subplots`
 subplot_points_SJER_utm <- st_transform(subplot_points_SJER, crs(biomass_subplots))
 
+# Check CRS
+crs(subplot_points_SJER_utm)
 
 ```
 
@@ -162,13 +162,17 @@ species_count_1m
 
 
 ```{r extract biomass data}
+# convert data frame to sf object for extract function
+subplot_points_SJER_utm_sf <- st_as_sf(subplot_points_SJER_utm, coords = c("easting", "northing"), crs = crs(subplot_points_SJER_utm))
+
 # Find mean biomass 
-mean_biomass <- extract(x = biomass_subplots_latlong,
-                                  y = subplot_points_SJER,
-                                  buffer = 20,
-                                  fun = mean, 
-                                  df = TRUE)
+mean_biomass <- extract(x = biomass_subplots,
+                        y = subplot_points_SJER_utm_sf,
+                        buffer = 20,
+                        fun = mean, 
+                        df = TRUE)
 mean_biomass
+
 
 # attach back to the subplot points frame 
 subplot_points_SJER <- mutate(subplot_points_SJER,
