@@ -166,7 +166,7 @@ species_count_1m
 subplot_points_SJER_utm_sf <- st_as_sf(subplot_points_SJER_utm, coords = c("easting", "northing"), crs = crs(subplot_points_SJER_utm))
 
 # Find mean biomass 
-mean_biomass <- extract(x = biomass_subplots,
+mean_biomass <- raster::extract(x = biomass_subplots,
                         y = subplot_points_SJER_utm_sf,
                         buffer = 20,
                         fun = mean, 
